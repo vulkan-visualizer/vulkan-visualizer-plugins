@@ -106,3 +106,6 @@ void vk::plugins::UISystemDefault::process_event(const SDL_Event& e) {
     }
     ImGui_ImplSDL3_ProcessEvent(&e);
 }
+void vk::plugins::UISystemDefault::record_imgui() {
+    std::print("Recording ImGui frame\n");
+}

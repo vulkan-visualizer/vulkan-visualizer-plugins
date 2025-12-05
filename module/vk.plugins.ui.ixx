@@ -12,6 +12,7 @@ namespace vk::plugins {
         void create_imgui(const context::EngineContext& e, VkFormat format, uint32_t n_swapchain_image);
         void destroy_imgui(const context::EngineContext& e);
         void process_event(const SDL_Event& e);
+        void record_imgui();
         VkDescriptorPool pool_{VK_NULL_HANDLE};
         VkFormat color_format_{};
     };

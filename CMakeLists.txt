@@ -51,7 +51,7 @@ file(WRITE "${_STB_IMPL}" [[
 ]])
 FetchContent_Declare(vulkan-visualizer
         GIT_REPOSITORY https://github.com/vulkan-visualizer/vulkan-visualizer.git
-        GIT_TAG v1.1.0
+        GIT_TAG master
         GIT_SHALLOW TRUE
 )
 

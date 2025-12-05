@@ -1,5 +1,3 @@
-#include <print>
-
 import vk.engine;
 import vk.plugins.camera;
 import vk.plugins.renderer;
