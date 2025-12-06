@@ -106,6 +106,77 @@ void vk::plugins::UISystemDefault::process_event(const SDL_Event& e) {
     }
     ImGui_ImplSDL3_ProcessEvent(&e);
 }
-void vk::plugins::UISystemDefault::record_imgui() {
-    std::print("Recording ImGui frame\n");
+
+void transition_to_color_attachment(VkCommandBuffer cmd, VkImage image, VkImageLayout oldLayout) {
+    VkImageMemoryBarrier2 barrier{
+        .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .pNext            = nullptr,
+        .srcStageMask     = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+        .srcAccessMask    = VK_ACCESS_2_MEMORY_WRITE_BIT,
+        .dstStageMask     = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .dstAccessMask    = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT,
+        .oldLayout        = oldLayout,
+        .newLayout        = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .image            = image,
+        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 0u, 1u},
+    };
+    VkDependencyInfo dep{
+        .sType                    = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount  = 1u,
+        .pImageMemoryBarriers     = &barrier,
+    };
+    vkCmdPipelineBarrier2(cmd, &dep);
+}
+
+void transition_to_present(VkCommandBuffer cmd, VkImage image) {
+    VkImageMemoryBarrier2 barrier{
+        .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask     = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .srcAccessMask    = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+        .dstStageMask     = VK_PIPELINE_STAGE_2_NONE,
+        .dstAccessMask    = 0u,
+        .oldLayout        = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .newLayout        = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .image            = image,
+        .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 0u, 1u},
+    };
+    VkDependencyInfo dep{
+        .sType                    = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount  = 1u,
+        .pImageMemoryBarriers     = &barrier,
+    };
+    vkCmdPipelineBarrier2(cmd, &dep);
+}
+
+void vk::plugins::UISystemDefault::record_imgui(VkCommandBuffer &cmd, const context::FrameContext& frm) {
+    ImGui_ImplVulkan_NewFrame();
+    ImGui_ImplSDL3_NewFrame();
+    ImGui::NewFrame();
+
+    ImGui::Begin("Hello");
+    ImGui::Text("ImGui + Vulkan + SDL3");
+    ImGui::End();
+
+    transition_to_color_attachment(cmd, frm.swapchain_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+    VkRenderingAttachmentInfo color_attachment{
+        .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .imageView   = frm.swapchain_image_view,
+        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .loadOp      = VK_ATTACHMENT_LOAD_OP_LOAD,
+        .storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
+    };
+    VkRenderingInfo rendering_info{
+        .sType                = VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .renderArea           = {{0, 0}, frm.extent},
+        .layerCount           = 1u,
+        .colorAttachmentCount = 1u,
+        .pColorAttachments    = &color_attachment,
+    };
+    vkCmdBeginRendering(cmd, &rendering_info);
+    ImGui::Render();
+    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
+    vkCmdEndRendering(cmd);
+
+    transition_to_present(cmd, frm.swapchain_image);
 }
