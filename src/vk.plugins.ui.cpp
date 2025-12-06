@@ -141,42 +141,98 @@ void transition_to_present(VkCommandBuffer cmd, VkImage image) {
         .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 0u, 1u},
     };
     VkDependencyInfo dep{
-        .sType                    = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .imageMemoryBarrierCount  = 1u,
-        .pImageMemoryBarriers     = &barrier,
+        .sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount = 1u,
+        .pImageMemoryBarriers    = &barrier,
     };
     vkCmdPipelineBarrier2(cmd, &dep);
 }
 
-void vk::plugins::UISystemDefault::record_imgui(VkCommandBuffer &cmd, const context::FrameContext& frm) {
+void vk::plugins::UISystemDefault::record_imgui(VkCommandBuffer& cmd, const context::FrameContext& frm) {
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
 
-    ImGui::Begin("Hello");
-    ImGui::Text("ImGui + Vulkan + SDL3");
-    ImGui::End();
+    static bool show_demo_window = true;
+    ImGui::ShowDemoWindow(&show_demo_window);
 
-    transition_to_color_attachment(cmd, frm.swapchain_image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
-    VkRenderingAttachmentInfo color_attachment{
-        .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-        .imageView   = frm.swapchain_image_view,
-        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .loadOp      = VK_ATTACHMENT_LOAD_OP_LOAD,
-        .storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
-    };
-    VkRenderingInfo rendering_info{
-        .sType                = VK_STRUCTURE_TYPE_RENDERING_INFO,
-        .renderArea           = {{0, 0}, frm.extent},
-        .layerCount           = 1u,
-        .colorAttachmentCount = 1u,
-        .pColorAttachments    = &color_attachment,
-    };
-    vkCmdBeginRendering(cmd, &rendering_info);
     ImGui::Render();
-    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
-    vkCmdEndRendering(cmd);
 
-    transition_to_present(cmd, frm.swapchain_image);
+    // Determine the target image and view based on presentation mode
+    VkImage target_image = VK_NULL_HANDLE;
+    VkImageView target_view = VK_NULL_HANDLE;
+
+    if (frm.presentation_mode == context::PresentationMode::DirectToSwapchain) {
+        // Render directly to swapchain
+        target_image = frm.swapchain_image;
+        target_view = frm.swapchain_image_view;
+        transition_to_color_attachment(cmd, target_image, VK_IMAGE_LAYOUT_UNDEFINED);
+    } else {
+        // Render to offscreen attachment (EngineBlit or RendererComposite modes)
+        if (!frm.color_attachments.empty()) {
+            target_image = frm.color_attachments[0].image;
+            target_view = frm.color_attachments[0].view;
+            // Transition from general layout (used by renderer) to color attachment
+            transition_to_color_attachment(cmd, target_image, VK_IMAGE_LAYOUT_GENERAL);
+        } else {
+            // Fallback to swapchain if no offscreen attachments
+            target_image = frm.swapchain_image;
+            target_view = frm.swapchain_image_view;
+            transition_to_color_attachment(cmd, target_image, VK_IMAGE_LAYOUT_UNDEFINED);
+        }
+    }
+
+    if (target_image != VK_NULL_HANDLE && target_view != VK_NULL_HANDLE) {
+        VkRenderingAttachmentInfo color_attachment{
+            .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+            .imageView   = target_view,
+            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .loadOp      = VK_ATTACHMENT_LOAD_OP_LOAD,  // Load existing content to preserve triangle
+            .storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
+        };
+        VkRenderingInfo rendering_info{
+            .sType                = VK_STRUCTURE_TYPE_RENDERING_INFO,
+            .renderArea           = {{0, 0}, frm.extent},
+            .layerCount           = 1u,
+            .colorAttachmentCount = 1u,
+            .pColorAttachments    = &color_attachment,
+        };
+        vkCmdBeginRendering(cmd, &rendering_info);
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
+        vkCmdEndRendering(cmd);
+
+        // Handle ImGui viewport processing after command buffer recording but before presentation
+        ImGuiIO& io = ImGui::GetIO();
+        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+        }
+
+        // Transition back to the appropriate layout
+        if (frm.presentation_mode == context::PresentationMode::DirectToSwapchain) {
+            transition_to_present(cmd, target_image);
+        } else {
+            // Transition back to general layout for offscreen attachments
+            VkImageMemoryBarrier2 barrier{
+                .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .srcStageMask     = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                .srcAccessMask    = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                .dstStageMask     = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                .dstAccessMask    = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
+                .oldLayout        = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                .newLayout        = VK_IMAGE_LAYOUT_GENERAL,
+                .image            = target_image,
+                .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 0u, 1u},
+            };
+            VkDependencyInfo dep{
+                .sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                .imageMemoryBarrierCount = 1u,
+                .pImageMemoryBarriers    = &barrier,
+            };
+            vkCmdPipelineBarrier2(cmd, &dep);
+        }
+    }
 }
+
+
+

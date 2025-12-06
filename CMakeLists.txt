@@ -166,6 +166,7 @@ foreach (test_src ${TEST_SOURCES})
 
     add_executable(${test_name} ${test_src})
     target_link_libraries(${test_name} PRIVATE vulkan_visualizer::plugins)
+    add_dependencies(${test_name} shaders)
 
     add_test(NAME run_${test_name} COMMAND ${test_name})
 
