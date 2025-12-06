@@ -82,8 +82,8 @@ namespace vk::plugins {
         }
 
         std::pair<VkShaderModule, VkShaderModule> load_shaders() {
-            VkShaderModule vs = load_shader_module("shaders/triangle.vert.spv");
-            VkShaderModule fs = load_shader_module("shaders/triangle.frag.spv");
+            VkShaderModule vs = load_shader_module("shader/triangle.vert.spv");
+            VkShaderModule fs = load_shader_module("shader/triangle.frag.spv");
             return {vs, fs};
         }
 

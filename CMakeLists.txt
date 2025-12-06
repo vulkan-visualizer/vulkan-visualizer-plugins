@@ -85,6 +85,75 @@ target_include_directories(vk_vis_plugins PRIVATE
 # ============================================================================
 # Test
 # ============================================================================
+function(compile_all_glsl_shaders)
+    cmake_parse_arguments(ARG "" "SOURCE_ROOT" "" ${ARGN})
+
+    if (NOT ARG_SOURCE_ROOT)
+        message(FATAL_ERROR "compile_all_glsl_shaders: SOURCE_ROOT is required")
+    endif()
+
+    find_program(GLSLC_EXECUTABLE glslc REQUIRED)
+    message(STATUS "Using glslc: ${GLSLC_EXECUTABLE}")
+
+    # Find shader directories but ignore _deps
+    file(GLOB_RECURSE SHADER_DIRS
+            LIST_DIRECTORIES true
+            RELATIVE "${ARG_SOURCE_ROOT}"
+            "${ARG_SOURCE_ROOT}/*/shader"
+            "${ARG_SOURCE_ROOT}/*/shaders"
+            "${ARG_SOURCE_ROOT}/shader"
+            "${ARG_SOURCE_ROOT}/shaders"
+    )
+
+    set(SPIRV_OUTPUTS)
+
+    foreach(dir IN LISTS SHADER_DIRS)
+        set(ABS_DIR "${ARG_SOURCE_ROOT}/${dir}")
+
+        file(GLOB SHADER_SOURCES
+                RELATIVE "${ARG_SOURCE_ROOT}"
+                "${ABS_DIR}/*.vert"
+                "${ABS_DIR}/*.frag"
+                "${ABS_DIR}/*.comp"
+                "${ABS_DIR}/*.geom"
+                "${ABS_DIR}/*.tesc"
+                "${ABS_DIR}/*.tese"
+        )
+
+        foreach(src IN LISTS SHADER_SOURCES)
+            set(ABS_SRC "${ARG_SOURCE_ROOT}/${src}")
+            set(SPV "${CMAKE_BINARY_DIR}/${src}.spv")
+
+            get_filename_component(SPV_DIR "${SPV}" DIRECTORY)
+            file(MAKE_DIRECTORY "${SPV_DIR}")
+
+            add_custom_command(
+                    OUTPUT "${SPV}"
+                    COMMAND "${GLSLC_EXECUTABLE}"
+                    --target-env=vulkan1.3
+                    -O
+                    -c
+                    "${ABS_SRC}"
+                    -o "${SPV}"
+                    DEPENDS "${ABS_SRC}"
+                    COMMENT "Compiling GLSL ${src}"
+                    VERBATIM
+            )
+
+            list(APPEND SPIRV_OUTPUTS "${SPV}")
+        endforeach()
+    endforeach()
+
+    if (SPIRV_OUTPUTS)
+        add_custom_target(shaders DEPENDS ${SPIRV_OUTPUTS})
+        message(STATUS "Shader build target created: shaders")
+    endif()
+endfunction()
+
+compile_all_glsl_shaders(
+        SOURCE_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/test
+)
+
 enable_testing()
 
 file(GLOB_RECURSE TEST_SOURCES
