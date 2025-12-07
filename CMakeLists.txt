@@ -22,12 +22,14 @@ FetchContent_Declare(imgui_src
         GIT_TAG v1.92.2b-docking
         GIT_SHALLOW TRUE
 )
-FetchContent_Declare(stb
-        GIT_REPOSITORY https://github.com/nothings/stb.git
+FetchContent_Declare(vulkan-visualizer
+        GIT_REPOSITORY https://github.com/vulkan-visualizer/vulkan-visualizer.git
         GIT_TAG master
         GIT_SHALLOW TRUE
 )
-FetchContent_MakeAvailable(imgui_src stb)
+
+FetchContent_MakeAvailable(imgui_src vulkan-visualizer)
+
 set(_IMGUI_SOURCES
         ${imgui_src_SOURCE_DIR}/imgui.cpp
         ${imgui_src_SOURCE_DIR}/imgui_demo.cpp
@@ -37,26 +39,6 @@ set(_IMGUI_SOURCES
         ${imgui_src_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
         ${imgui_src_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
 )
-set(_STB_IMPL "${CMAKE_CURRENT_BINARY_DIR}/stb_impl.cpp")
-file(WRITE "${_STB_IMPL}" [[
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable: 4100 4127 4189 4244 4365 4514 4820 4996)
-#endif
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include <stb_image_write.h>
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
-]])
-FetchContent_Declare(vulkan-visualizer
-        GIT_REPOSITORY https://github.com/vulkan-visualizer/vulkan-visualizer.git
-        GIT_TAG master
-        GIT_SHALLOW TRUE
-)
-
-FetchContent_MakeAvailable(imgui_src stb vulkan-visualizer)
-
 
 # ============================================================================
 # Library Target
@@ -67,14 +49,12 @@ target_sources(vk_vis_plugins
         PRIVATE
         src/vk.plugins.viewport.cpp
         ${_IMGUI_SOURCES}
-        ${_STB_IMPL}
         PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
         module/vk.plugins.viewport.ixx
 )
 target_link_libraries(vk_vis_plugins PRIVATE vulkan_visualizer::vk_vis)
 target_include_directories(vk_vis_plugins PRIVATE
         $<BUILD_INTERFACE:${imgui_src_SOURCE_DIR}>
-        $<BUILD_INTERFACE:${stb_SOURCE_DIR}>
 )
 
 
