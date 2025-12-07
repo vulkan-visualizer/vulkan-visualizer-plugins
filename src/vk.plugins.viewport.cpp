@@ -243,7 +243,7 @@ void vk::plugins::ViewpoertPlugin::initialize() {
     std::println("Viewport Plugin initialized.");
 }
 void vk::plugins::ViewpoertPlugin::update() {
-    std::println("Viewpoint Plugin updated.");
+    // std::println("Viewpoint Plugin updated.");
 }
 void vk::plugins::ViewpoertPlugin::shutdown() {
     std::println("Viewport Plugin shutdown.");
