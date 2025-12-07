@@ -17,4 +17,3 @@ void main() {
     gl_Position = vec4(kPositions[gl_VertexIndex], 0.0, 1.0);
     vColor = kColors[gl_VertexIndex];
 }
-

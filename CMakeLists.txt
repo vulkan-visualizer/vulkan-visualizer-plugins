@@ -65,15 +65,11 @@ add_library(vk_vis_plugins)
 add_library(vulkan_visualizer::plugins ALIAS vk_vis_plugins)
 target_sources(vk_vis_plugins
         PRIVATE
-        src/vk.plugins.camera.cpp
-        src/vk.plugins.renderer.cpp
-        src/vk.plugins.ui.cpp
+        src/vk.plugins.viewport.cpp
         ${_IMGUI_SOURCES}
         ${_STB_IMPL}
         PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
-        module/vk.plugins.camera.ixx
-        module/vk.plugins.renderer.ixx
-        module/vk.plugins.ui.ixx
+        module/vk.plugins.viewport.ixx
 )
 target_link_libraries(vk_vis_plugins PRIVATE vulkan_visualizer::vk_vis)
 target_include_directories(vk_vis_plugins PRIVATE
