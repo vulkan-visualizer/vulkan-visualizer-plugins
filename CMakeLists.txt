@@ -17,28 +17,12 @@ set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 # Dependencies
 # ============================================================================
 include(FetchContent)
-FetchContent_Declare(imgui_src
-        GIT_REPOSITORY https://github.com/ocornut/imgui.git
-        GIT_TAG v1.92.2b-docking
-        GIT_SHALLOW TRUE
-)
 FetchContent_Declare(vulkan-visualizer
         GIT_REPOSITORY https://github.com/vulkan-visualizer/vulkan-visualizer.git
         GIT_TAG master
         GIT_SHALLOW TRUE
 )
-
-FetchContent_MakeAvailable(imgui_src vulkan-visualizer)
-
-set(_IMGUI_SOURCES
-        ${imgui_src_SOURCE_DIR}/imgui.cpp
-        ${imgui_src_SOURCE_DIR}/imgui_demo.cpp
-        ${imgui_src_SOURCE_DIR}/imgui_draw.cpp
-        ${imgui_src_SOURCE_DIR}/imgui_tables.cpp
-        ${imgui_src_SOURCE_DIR}/imgui_widgets.cpp
-        ${imgui_src_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
-        ${imgui_src_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
-)
+FetchContent_MakeAvailable(vulkan-visualizer)
 
 # ============================================================================
 # Library Target
@@ -48,14 +32,10 @@ add_library(vulkan_visualizer::plugins ALIAS vk_vis_plugins)
 target_sources(vk_vis_plugins
         PRIVATE
         src/vk.plugins.viewport.cpp
-        ${_IMGUI_SOURCES}
         PUBLIC FILE_SET cxx_modules TYPE CXX_MODULES FILES
         module/vk.plugins.viewport.ixx
 )
 target_link_libraries(vk_vis_plugins PRIVATE vulkan_visualizer::vk_vis)
-target_include_directories(vk_vis_plugins PRIVATE
-        $<BUILD_INTERFACE:${imgui_src_SOURCE_DIR}>
-)
 
 
 # ============================================================================

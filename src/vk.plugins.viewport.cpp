@@ -2,6 +2,7 @@ module;
 #include <SDL3/SDL.h>
 #include <array>
 #include <fstream>
+#include <imgui.h>
 #include <print>
 #include <stdexcept>
 #include <string>
@@ -234,7 +235,81 @@ void vk::plugins::ViewportRenderer::transition_image_layout(VkCommandBuffer& cmd
     vkCmdPipelineBarrier2(cmd, &depInfo);
 }
 
-void vk::plugins::ViewportUI::create_imgui(const context::EngineContext& eng, VkFormat format, uint32_t n_swapchain_image) {}
+void vk::plugins::ViewportUI::create_imgui(const context::EngineContext& eng, VkFormat format, uint32_t n_swapchain_image) {
+    std::array<VkDescriptorPoolSize, 11> pool_sizes{{
+        {VK_DESCRIPTOR_TYPE_SAMPLER, 1000},
+        {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000},
+        {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000},
+        {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000},
+        {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000},
+        {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000},
+        {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000},
+        {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000},
+    }};
+    VkDescriptorPoolCreateInfo pool_info{
+        .sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .pNext         = nullptr,
+        .flags         = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+        .maxSets       = 1000u * static_cast<uint32_t>(pool_sizes.size()),
+        .poolSizeCount = static_cast<uint32_t>(pool_sizes.size()),
+        .pPoolSizes    = pool_sizes.data(),
+    };
+    VK_CHECK(vkCreateDescriptorPool(device, &pool_info, nullptr, &pool_));
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+    ImGui::StyleColorsDark();
+    if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+        ImGuiStyle& style                 = ImGui::GetStyle();
+        style.WindowRounding              = 0.0f;
+        style.Colors[ImGuiCol_WindowBg].w = 1.0f;
+    }
+    if (!ImGui_ImplSDL3_InitForVulkan(window)) {
+        ImGui::DestroyContext();
+        vkDestroyDescriptorPool(device, pool_, nullptr);
+        pool_ = VK_NULL_HANDLE;
+        return false;
+    }
+    ImGui_ImplVulkan_InitInfo init_info{};
+    init_info.ApiVersion          = VK_API_VERSION_1_3;
+    init_info.Instance            = instance;
+    init_info.PhysicalDevice      = physicalDevice;
+    init_info.Device              = device;
+    init_info.QueueFamily         = graphicsQueueFamily;
+    init_info.Queue               = graphicsQueue;
+    init_info.DescriptorPool      = pool_;
+    init_info.MinImageCount       = swapchainImageCount;
+    init_info.ImageCount          = swapchainImageCount;
+    init_info.MSAASamples         = VK_SAMPLE_COUNT_1_BIT;
+    init_info.Allocator           = nullptr;
+    init_info.CheckVkResultFn     = [](VkResult res) { VK_CHECK(res); };
+    init_info.UseDynamicRendering = VK_TRUE;
+    VkPipelineRenderingCreateInfo rendering_info{
+        .sType                   = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+        .pNext                   = nullptr,
+        .viewMask                = 0,
+        .colorAttachmentCount    = 1,
+        .pColorAttachmentFormats = &swapchainFormat,
+        .depthAttachmentFormat   = VK_FORMAT_UNDEFINED,
+        .stencilAttachmentFormat = VK_FORMAT_UNDEFINED,
+    };
+    init_info.PipelineRenderingCreateInfo = rendering_info;
+    if (!ImGui_ImplVulkan_Init(&init_info)) {
+        ImGui_ImplSDL3_Shutdown();
+        ImGui::DestroyContext();
+        vkDestroyDescriptorPool(device, pool_, nullptr);
+        pool_ = VK_NULL_HANDLE;
+        return false;
+    }
+    color_format_ = swapchainFormat;
+    initialized_  = true;
+    return true;
+}
 void vk::plugins::ViewportUI::destroy_imgui(const context::EngineContext& eng) {}
 void vk::plugins::ViewportUI::process_event(const SDL_Event& event) {}
 void vk::plugins::ViewportUI::record_imgui(VkCommandBuffer& cmd, const context::FrameContext& frm) {}
