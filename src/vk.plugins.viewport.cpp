@@ -176,7 +176,7 @@ void vk::plugins::ViewportRenderer::draw_triangle(VkCommandBuffer cmd, VkExtent2
     vkCmdDraw(cmd, 3, 1, 0, 0);
 }
 void vk::plugins::ViewportRenderer::begin_rendering(VkCommandBuffer& cmd, const context::AttachmentView& target, VkExtent2D extent) {
-    constexpr VkClearValue clear_value{.color = {{0.05f, 0.07f, 0.12f, 1.0f}}};
+    constexpr VkClearValue clear_value{.color = {{0.f, 0.f, 0.f, 1.0f}}};
     VkRenderingAttachmentInfo color_attachment{
         .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .imageView   = target.view,
