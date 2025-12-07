@@ -18,6 +18,84 @@ module vk.plugins.viewport;
 #endif
 // clang-format on
 
+namespace vk::plugins {
+    static void transition_image_layout(VkCommandBuffer& cmd, const vk::context::AttachmentView& target, VkImageLayout old_layout, VkImageLayout new_layout) {
+        auto [src_stage, dst_stage, src_access, dst_access] = [&]() -> std::array<std::uint64_t, 4> {
+            if (old_layout == VK_IMAGE_LAYOUT_GENERAL && new_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+                return {
+                    VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                    VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                    VK_ACCESS_2_MEMORY_WRITE_BIT,
+                    VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                };
+
+            return {
+                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
+            };
+        }();
+
+        VkImageMemoryBarrier2 barrier{
+            .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .srcStageMask     = src_stage,
+            .srcAccessMask    = src_access,
+            .dstStageMask     = dst_stage,
+            .dstAccessMask    = dst_access,
+            .oldLayout        = old_layout,
+            .newLayout        = new_layout,
+            .image            = target.image,
+            .subresourceRange = {target.aspect, 0, 1, 0, 1},
+        };
+        const VkDependencyInfo depInfo{
+            .sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .imageMemoryBarrierCount = 1,
+            .pImageMemoryBarriers    = &barrier,
+        };
+        vkCmdPipelineBarrier2(cmd, &depInfo);
+    }
+    static void transition_to_color_attachment(VkCommandBuffer cmd, VkImage image, VkImageLayout old_layout) {
+        VkImageMemoryBarrier2 barrier{
+            .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .pNext            = nullptr,
+            .srcStageMask     = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            .srcAccessMask    = VK_ACCESS_2_MEMORY_WRITE_BIT,
+            .dstStageMask     = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .dstAccessMask    = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT,
+            .oldLayout        = old_layout,
+            .newLayout        = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .image            = image,
+            .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 0u, 1u},
+        };
+        VkDependencyInfo dep{
+            .sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .imageMemoryBarrierCount = 1u,
+            .pImageMemoryBarriers    = &barrier,
+        };
+        vkCmdPipelineBarrier2(cmd, &dep);
+    }
+    static void transition_to_present(VkCommandBuffer cmd, VkImage image) {
+        VkImageMemoryBarrier2 barrier{
+            .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+            .srcStageMask     = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            .srcAccessMask    = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+            .dstStageMask     = VK_PIPELINE_STAGE_2_NONE,
+            .dstAccessMask    = 0u,
+            .oldLayout        = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .newLayout        = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+            .image            = image,
+            .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 0u, 1u},
+        };
+        VkDependencyInfo dep{
+            .sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+            .imageMemoryBarrierCount = 1u,
+            .pImageMemoryBarriers    = &barrier,
+        };
+        vkCmdPipelineBarrier2(cmd, &dep);
+    }
+} // namespace vk::plugins
+
 void vk::plugins::ViewportRenderer::query_required_device_caps(context::RendererCaps& caps) {
     caps.allow_async_compute = false;
 }
@@ -200,42 +278,6 @@ void vk::plugins::ViewportRenderer::begin_rendering(VkCommandBuffer& cmd, const 
 void vk::plugins::ViewportRenderer::end_rendering(VkCommandBuffer& cmd) {
     vkCmdEndRendering(cmd);
 }
-void vk::plugins::ViewportRenderer::transition_image_layout(VkCommandBuffer& cmd, const context::AttachmentView& target, VkImageLayout old_layout, VkImageLayout new_layout) {
-    auto [src_stage, dst_stage, src_access, dst_access] = [&]() -> std::array<std::uint64_t, 4> {
-        if (old_layout == VK_IMAGE_LAYOUT_GENERAL && new_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
-            return {
-                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                VK_ACCESS_2_MEMORY_WRITE_BIT,
-                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-            };
-
-        return {
-            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-            VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-            VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-            VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
-        };
-    }();
-
-    VkImageMemoryBarrier2 barrier{
-        .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-        .srcStageMask     = src_stage,
-        .srcAccessMask    = src_access,
-        .dstStageMask     = dst_stage,
-        .dstAccessMask    = dst_access,
-        .oldLayout        = old_layout,
-        .newLayout        = new_layout,
-        .image            = target.image,
-        .subresourceRange = {target.aspect, 0, 1, 0, 1},
-    };
-    const VkDependencyInfo depInfo{
-        .sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-        .imageMemoryBarrierCount = 1,
-        .pImageMemoryBarriers    = &barrier,
-    };
-    vkCmdPipelineBarrier2(cmd, &depInfo);
-}
 
 void vk::plugins::ViewportUI::create_imgui(context::EngineContext& eng, const context::FrameContext& frm) {
     std::array<VkDescriptorPoolSize, 11> pool_sizes{{
@@ -298,9 +340,104 @@ void vk::plugins::ViewportUI::create_imgui(context::EngineContext& eng, const co
     init_info.PipelineRenderingCreateInfo = rendering_info;
     if (!ImGui_ImplVulkan_Init(&init_info)) throw std::runtime_error("Failed to initialize ImGui Vulkan backend.");
 }
-void vk::plugins::ViewportUI::destroy_imgui(const context::EngineContext& eng) {}
-void vk::plugins::ViewportUI::process_event(const SDL_Event& event) {}
-void vk::plugins::ViewportUI::record_imgui(VkCommandBuffer& cmd, const context::FrameContext& frm) {}
+void vk::plugins::ViewportUI::destroy_imgui(const context::EngineContext& eng) {
+    ImGui_ImplVulkan_Shutdown();
+    ImGui_ImplSDL3_Shutdown();
+    ImGui::DestroyContext();
+}
+void vk::plugins::ViewportUI::process_event(const SDL_Event& event) {
+    if (event.type == SDL_EVENT_KEY_DOWN) {
+        const auto mods = static_cast<SDL_Keymod>(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_SHIFT | SDL_KMOD_ALT));
+        SDL_Keycode key = event.key.key;
+        std::print("Key down: key={} mod={}\n", key, static_cast<int>(mods));
+    }
+    ImGui_ImplSDL3_ProcessEvent(&event);
+}
+void vk::plugins::ViewportUI::record_imgui(VkCommandBuffer& cmd, const context::FrameContext& frm) {
+    ImGui_ImplVulkan_NewFrame();
+    ImGui_ImplSDL3_NewFrame();
+    ImGui::NewFrame();
+
+    static bool show_demo_window = true;
+    ImGui::ShowDemoWindow(&show_demo_window);
+
+    ImGui::Render();
+
+    // Determine the target image and view based on presentation mode
+    VkImage target_image    = VK_NULL_HANDLE;
+    VkImageView target_view = VK_NULL_HANDLE;
+
+    if (frm.presentation_mode == context::PresentationMode::DirectToSwapchain) {
+        // Render directly to swapchain
+        target_image = frm.swapchain_image;
+        target_view  = frm.swapchain_image_view;
+        transition_to_color_attachment(cmd, target_image, VK_IMAGE_LAYOUT_UNDEFINED);
+    } else {
+        // Render to offscreen attachment (EngineBlit or RendererComposite modes)
+        if (!frm.color_attachments.empty()) {
+            target_image = frm.color_attachments[0].image;
+            target_view  = frm.color_attachments[0].view;
+            // Transition from general layout (used by renderer) to color attachment
+            transition_to_color_attachment(cmd, target_image, VK_IMAGE_LAYOUT_GENERAL);
+        } else {
+            // Fallback to swapchain if no offscreen attachments
+            target_image = frm.swapchain_image;
+            target_view  = frm.swapchain_image_view;
+            transition_to_color_attachment(cmd, target_image, VK_IMAGE_LAYOUT_UNDEFINED);
+        }
+    }
+
+    if (target_image != VK_NULL_HANDLE && target_view != VK_NULL_HANDLE) {
+        VkRenderingAttachmentInfo color_attachment{
+            .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+            .imageView   = target_view,
+            .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+            .loadOp      = VK_ATTACHMENT_LOAD_OP_LOAD, // Load existing content to preserve triangle
+            .storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
+        };
+        VkRenderingInfo rendering_info{
+            .sType                = VK_STRUCTURE_TYPE_RENDERING_INFO,
+            .renderArea           = {{0, 0}, frm.extent},
+            .layerCount           = 1u,
+            .colorAttachmentCount = 1u,
+            .pColorAttachments    = &color_attachment,
+        };
+        vkCmdBeginRendering(cmd, &rendering_info);
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
+        vkCmdEndRendering(cmd);
+
+        // Handle ImGui viewport processing after command buffer recording but before presentation
+        ImGuiIO& io = ImGui::GetIO();
+        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) {
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+        }
+
+        // Transition back to the appropriate layout
+        if (frm.presentation_mode == context::PresentationMode::DirectToSwapchain) {
+            transition_to_present(cmd, target_image);
+        } else {
+            // Transition back to general layout for offscreen attachments
+            VkImageMemoryBarrier2 barrier{
+                .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+                .srcStageMask     = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                .srcAccessMask    = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                .dstStageMask     = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                .dstAccessMask    = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
+                .oldLayout        = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                .newLayout        = VK_IMAGE_LAYOUT_GENERAL,
+                .image            = target_image,
+                .subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0u, 1u, 0u, 1u},
+            };
+            VkDependencyInfo dep{
+                .sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+                .imageMemoryBarrierCount = 1u,
+                .pImageMemoryBarriers    = &barrier,
+            };
+            vkCmdPipelineBarrier2(cmd, &dep);
+        }
+    }
+}
 
 void vk::plugins::ViewpoertPlugin::initialize() {
     std::println("Viewport Plugin initialized.");

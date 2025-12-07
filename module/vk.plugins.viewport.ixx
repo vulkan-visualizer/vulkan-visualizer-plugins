@@ -21,7 +21,6 @@ namespace vk::plugins {
 
         static void begin_rendering(VkCommandBuffer& cmd, const context::AttachmentView& target, VkExtent2D extent);
         static void end_rendering(VkCommandBuffer& cmd);
-        static void transition_image_layout(VkCommandBuffer& cmd, const context::AttachmentView& target, VkImageLayout old_layout, VkImageLayout new_layout);
 
     private:
         VkPipelineLayout layout{VK_NULL_HANDLE};
