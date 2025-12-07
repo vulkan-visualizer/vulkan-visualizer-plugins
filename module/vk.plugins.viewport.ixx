@@ -17,6 +17,11 @@ namespace vk::plugins {
     protected:
         void create_pipeline_layout(const context::EngineContext& eng);
         void create_graphics_pipeline(const context::EngineContext& eng);
+        void draw_triangle(VkCommandBuffer cmd, VkExtent2D extent) const;
+
+        static void begin_rendering(VkCommandBuffer& cmd, const context::AttachmentView& target, VkExtent2D extent);
+        static void end_rendering(VkCommandBuffer& cmd);
+        static void transition_image_layout(VkCommandBuffer& cmd, const context::AttachmentView& target, VkImageLayout old_layout, VkImageLayout new_layout);
 
     private:
         VkPipelineLayout layout{VK_NULL_HANDLE};

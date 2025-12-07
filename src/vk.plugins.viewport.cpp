@@ -1,5 +1,6 @@
 module;
 #include <SDL3/SDL.h>
+#include <array>
 #include <fstream>
 #include <stdexcept>
 #include <string>
@@ -24,7 +25,7 @@ void vk::plugins::ViewportRenderer::get_capabilities(context::RendererCaps& caps
     caps.presentation_attachment    = "color";
 }
 void vk::plugins::ViewportRenderer::initialize(const context::EngineContext& eng, const context::RendererCaps& caps) {
-    this->fmt = caps.color_attachments.empty() ? VK_FORMAT_B8G8R8A8_UNORM : caps.color_attachments.front().format;
+    this->fmt                      = caps.color_attachments.empty() ? VK_FORMAT_B8G8R8A8_UNORM : caps.color_attachments.front().format;
     this->m_color_blend_attachment = {
         .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
     };
@@ -41,7 +42,13 @@ void vk::plugins::ViewportRenderer::destroy(const context::EngineContext& eng) {
     layout = VK_NULL_HANDLE;
 }
 void vk::plugins::ViewportRenderer::record_graphics(VkCommandBuffer& cmd, const context::EngineContext& eng, const context::FrameContext& frm) {
+    const auto& target = frm.color_attachments.front();
 
+    transition_image_layout(cmd, target, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+    begin_rendering(cmd, target, frm.extent);
+    draw_triangle(cmd, frm.extent);
+    end_rendering(cmd);
+    transition_image_layout(cmd, target, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_GENERAL);
 }
 void vk::plugins::ViewportRenderer::create_pipeline_layout(const context::EngineContext& eng) {
     constexpr VkPipelineLayoutCreateInfo lci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
@@ -51,7 +58,7 @@ void vk::plugins::ViewportRenderer::create_graphics_pipeline(const context::Engi
 
     VkShaderModule vs;
     {
-        std::ifstream f("", std::ios::binary | std::ios::ate);
+        std::ifstream f("shader/triangle.vert.spv", std::ios::binary | std::ios::ate);
         const size_t s = static_cast<size_t>(f.tellg());
         f.seekg(0);
         std::vector<char> d(s);
@@ -65,7 +72,7 @@ void vk::plugins::ViewportRenderer::create_graphics_pipeline(const context::Engi
 
     VkShaderModule fs;
     {
-        std::ifstream f("", std::ios::binary | std::ios::ate);
+        std::ifstream f("shader/triangle.frag.spv", std::ios::binary | std::ios::ate);
         const size_t s = static_cast<size_t>(f.tellg());
         f.seekg(0);
         std::vector<char> d(s);
@@ -147,6 +154,83 @@ void vk::plugins::ViewportRenderer::create_graphics_pipeline(const context::Engi
 
     vkDestroyShaderModule(eng.device, vs, nullptr);
     vkDestroyShaderModule(eng.device, fs, nullptr);
+}
+void vk::plugins::ViewportRenderer::draw_triangle(VkCommandBuffer cmd, VkExtent2D extent) const {
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, this->pipe);
+
+    VkViewport viewport{
+        .width    = static_cast<float>(extent.width),
+        .height   = static_cast<float>(extent.height),
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f,
+    };
+    vkCmdSetViewport(cmd, 0, 1, &viewport);
+
+    VkRect2D scissor{
+        .offset = {0, 0},
+        .extent = extent,
+    };
+    vkCmdSetScissor(cmd, 0, 1, &scissor);
+
+    vkCmdDraw(cmd, 3, 1, 0, 0);
+}
+void vk::plugins::ViewportRenderer::begin_rendering(VkCommandBuffer& cmd, const context::AttachmentView& target, VkExtent2D extent) {
+    constexpr VkClearValue clear_value{.color = {{0.05f, 0.07f, 0.12f, 1.0f}}};
+    VkRenderingAttachmentInfo color_attachment{
+        .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .imageView   = target.view,
+        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue  = clear_value,
+    };
+    VkRenderingInfo render_info{
+        .sType                = VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .renderArea           = {{0, 0}, extent},
+        .layerCount           = 1,
+        .colorAttachmentCount = 1,
+        .pColorAttachments    = &color_attachment,
+    };
+    vkCmdBeginRendering(cmd, &render_info);
+}
+void vk::plugins::ViewportRenderer::end_rendering(VkCommandBuffer& cmd) {
+    vkCmdEndRendering(cmd);
+}
+void vk::plugins::ViewportRenderer::transition_image_layout(VkCommandBuffer& cmd, const context::AttachmentView& target, VkImageLayout old_layout, VkImageLayout new_layout) {
+    auto [src_stage, dst_stage, src_access, dst_access] = [&]() -> std::array<std::uint64_t, 4> {
+        if (old_layout == VK_IMAGE_LAYOUT_GENERAL && new_layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+            return {
+                VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                VK_ACCESS_2_MEMORY_WRITE_BIT,
+                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+            };
+
+        return {
+            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+            VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+            VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT,
+        };
+    }();
+
+    VkImageMemoryBarrier2 barrier{
+        .sType            = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+        .srcStageMask     = src_stage,
+        .srcAccessMask    = src_access,
+        .dstStageMask     = dst_stage,
+        .dstAccessMask    = dst_access,
+        .oldLayout        = old_layout,
+        .newLayout        = new_layout,
+        .image            = target.image,
+        .subresourceRange = {target.aspect, 0, 1, 0, 1},
+    };
+    const VkDependencyInfo depInfo{
+        .sType                   = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .imageMemoryBarrierCount = 1,
+        .pImageMemoryBarriers    = &barrier,
+    };
+    vkCmdPipelineBarrier2(cmd, &depInfo);
 }
 
 void vk::plugins::ViewportUI::create_imgui(const context::EngineContext& eng, VkFormat format, uint32_t n_swapchain_image) {}
