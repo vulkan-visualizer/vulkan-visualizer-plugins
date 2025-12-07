@@ -2,6 +2,7 @@ module;
 #include <SDL3/SDL.h>
 #include <array>
 #include <fstream>
+#include <print>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -237,3 +238,13 @@ void vk::plugins::ViewportUI::create_imgui(const context::EngineContext& eng, Vk
 void vk::plugins::ViewportUI::destroy_imgui(const context::EngineContext& eng) {}
 void vk::plugins::ViewportUI::process_event(const SDL_Event& event) {}
 void vk::plugins::ViewportUI::record_imgui(VkCommandBuffer& cmd, const context::FrameContext& frm) {}
+
+void vk::plugins::ViewpoertPlugin::initialize() {
+    std::println("Viewport Plugin initialized.");
+}
+void vk::plugins::ViewpoertPlugin::update() {
+    std::println("Viewpoint Plugin updated.");
+}
+void vk::plugins::ViewpoertPlugin::shutdown() {
+    std::println("Viewport Plugin shutdown.");
+}

@@ -48,4 +48,10 @@ namespace vk::plugins {
         void process_event(const SDL_Event& event);
         void record_imgui(VkCommandBuffer& cmd, const context::FrameContext& frm);
     };
+    export class ViewpoertPlugin {
+    public:
+        void initialize();
+        void update();
+        void shutdown();
+    };
 } // namespace vk::plugins
