@@ -10,7 +10,7 @@ namespace vk::plugins {
     public:
         void query_required_device_caps(context::RendererCaps& caps);
         void get_capabilities(context::RendererCaps& caps);
-        void initialize(const context::EngineContext& eng, const context::RendererCaps& caps, const context::FrameContext& frm);
+        void initialize(const context::EngineContext& eng, const context::RendererCaps& caps);
         void destroy(const context::EngineContext& eng);
         void record_graphics(VkCommandBuffer& cmd, const context::EngineContext& eng, const context::FrameContext& frm);
 

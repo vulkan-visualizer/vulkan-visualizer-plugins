@@ -23,7 +23,7 @@ void vk::plugins::ViewportRenderer::get_capabilities(context::RendererCaps& caps
     caps.color_attachments          = {context::AttachmentRequest{.name = "color", .format = VK_FORMAT_B8G8R8A8_UNORM, .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, .samples = VK_SAMPLE_COUNT_1_BIT, .aspect = VK_IMAGE_ASPECT_COLOR_BIT, .initial_layout = VK_IMAGE_LAYOUT_GENERAL}};
     caps.presentation_attachment    = "color";
 }
-void vk::plugins::ViewportRenderer::initialize(const context::EngineContext& eng, const context::RendererCaps& caps, const context::FrameContext& frm) {
+void vk::plugins::ViewportRenderer::initialize(const context::EngineContext& eng, const context::RendererCaps& caps) {
     this->fmt = caps.color_attachments.empty() ? VK_FORMAT_B8G8R8A8_UNORM : caps.color_attachments.front().format;
     this->m_color_blend_attachment = {
         .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
@@ -40,7 +40,9 @@ void vk::plugins::ViewportRenderer::destroy(const context::EngineContext& eng) {
     vkDestroyPipelineLayout(eng.device, layout, nullptr);
     layout = VK_NULL_HANDLE;
 }
-void vk::plugins::ViewportRenderer::record_graphics(VkCommandBuffer& cmd, const context::EngineContext& eng, const context::FrameContext& frm) {}
+void vk::plugins::ViewportRenderer::record_graphics(VkCommandBuffer& cmd, const context::EngineContext& eng, const context::FrameContext& frm) {
+
+}
 void vk::plugins::ViewportRenderer::create_pipeline_layout(const context::EngineContext& eng) {
     constexpr VkPipelineLayoutCreateInfo lci{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
     VK_CHECK(vkCreatePipelineLayout(eng.device, &lci, nullptr, &layout));
